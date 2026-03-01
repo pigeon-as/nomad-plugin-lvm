@@ -18,7 +18,7 @@ func main() {
 
 	switch os.Args[1] {
 	case "fingerprint":
-		if err := cmdFingerprint(cfg); err != nil {
+		if err := cmdFingerprint(); err != nil {
 			fatalf("fingerprint: %v", err)
 		}
 	case "create":

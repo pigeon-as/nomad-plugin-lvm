@@ -12,6 +12,9 @@ func cmdCreate(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	if err := validLVName(volumeID); err != nil {
+		return err
+	}
 
 	params, err := parseParams()
 	if err != nil {
@@ -61,6 +64,9 @@ func createPersistent(cfg *Config, volumeID string, params *Params) error {
 func createSnapshot(cfg *Config, volumeID string, params *Params) error {
 	if params.Source == "" {
 		return fmt.Errorf("source is required for snapshot volumes")
+	}
+	if err := validLVName(params.Source); err != nil {
+		return err
 	}
 	if !lvExists(cfg.VolumeGroup, params.Source) {
 		return fmt.Errorf("source volume %q does not exist in VG %s", params.Source, cfg.VolumeGroup)

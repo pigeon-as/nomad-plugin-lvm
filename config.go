@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 )
 
 const (
@@ -90,4 +91,13 @@ func envRequired(key string) (string, error) {
 		return "", fmt.Errorf("required environment variable %s is not set", key)
 	}
 	return v, nil
+}
+
+var validLVNameRe = regexp.MustCompile(`^[a-zA-Z0-9+_.\-]+$`)
+
+func validLVName(name string) error {
+	if !validLVNameRe.MatchString(name) {
+		return fmt.Errorf("invalid LV name: %q", name)
+	}
+	return nil
 }

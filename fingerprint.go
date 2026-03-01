@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-func cmdFingerprint(cfg *Config) error {
+func cmdFingerprint() error {
 	return json.NewEncoder(os.Stdout).Encode(map[string]string{
 		"version": pluginVersion,
 	})

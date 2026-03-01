@@ -5,5 +5,8 @@ func cmdDelete(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	if err := validLVName(volumeID); err != nil {
+		return err
+	}
 	return lvRemove(cfg.VolumeGroup, volumeID)
 }

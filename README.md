@@ -40,7 +40,7 @@ capability {
 nomad volume create myapp-data.volume.hcl
 ```
 
-Creates a thin LV with an ext4 filesystem. Override with `parameters { filesystem = "xfs" }`.
+Creates a thin LV with an ext4 filesystem.
 
 ## Snapshots
 
@@ -67,7 +67,7 @@ Per-volume parameters in the `parameters {}` block:
 |--------------|--------------|------------------------------------------------------|
 | `type`       | `persistent` | `persistent` (new thin LV) or `snapshot` (COW clone) |
 | `source`     | —            | Source LV name (required when `type = "snapshot"`)   |
-| `filesystem` | `ext4`       | Filesystem for persistent volumes                    |
+| `filesystem` | `ext4`       | Filesystem for persistent volumes (only ext4)        |
 
 ## Requirements
 

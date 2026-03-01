@@ -93,7 +93,7 @@ func envRequired(key string) (string, error) {
 	return v, nil
 }
 
-var validLVNameRe = regexp.MustCompile(`^[a-zA-Z0-9+_.\-]+$`)
+var validLVNameRe = regexp.MustCompile(`^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$`)
 
 func validLVName(name string) error {
 	if !validLVNameRe.MatchString(name) {

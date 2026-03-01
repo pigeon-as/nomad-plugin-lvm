@@ -11,28 +11,30 @@ func main() {
 		fatalf("usage: nomad-plugin-lvm <fingerprint|create|delete>")
 	}
 
-	cfg, err := loadConfig()
-	if err != nil {
-		fatalf("config: %v", err)
-	}
-
-	switch os.Args[1] {
-	case "fingerprint":
+	if os.Args[1] == "fingerprint" {
 		if err := cmdFingerprint(); err != nil {
 			fatalf("fingerprint: %v", err)
 		}
+		return
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		writeError(fmt.Errorf("config: %w", err))
+		os.Exit(1)
+	}
+
+	switch os.Args[1] {
 	case "create":
-		if err := cmdCreate(cfg); err != nil {
-			writeError(err)
-			os.Exit(1)
-		}
+		err = cmdCreate(cfg)
 	case "delete":
-		if err := cmdDelete(cfg); err != nil {
-			writeError(err)
-			os.Exit(1)
-		}
+		err = cmdDelete(cfg)
 	default:
 		fatalf("unknown operation: %s", os.Args[1])
+	}
+	if err != nil {
+		writeError(err)
+		os.Exit(1)
 	}
 }
 

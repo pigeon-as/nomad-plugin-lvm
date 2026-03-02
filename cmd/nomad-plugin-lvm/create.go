@@ -7,6 +7,45 @@ import (
 	"strconv"
 )
 
+type Params struct {
+	Type       string `json:"type"`
+	Source     string `json:"source"`
+	Filesystem string `json:"filesystem"`
+}
+
+func parseParams() (*Params, error) {
+	raw := os.Getenv("DHV_PARAMETERS")
+	if raw == "" || raw == "{}" {
+		return &Params{Type: "persistent", Filesystem: "ext4"}, nil
+	}
+	var p Params
+	if err := json.Unmarshal([]byte(raw), &p); err != nil {
+		return nil, fmt.Errorf("parsing DHV_PARAMETERS: %w", err)
+	}
+	if p.Type == "" {
+		p.Type = "persistent"
+	}
+	if p.Filesystem == "" {
+		p.Filesystem = "ext4"
+	}
+	return &p, nil
+}
+
+func parseCapacity() (int64, error) {
+	v := os.Getenv("DHV_CAPACITY_MIN_BYTES")
+	if v == "" {
+		return 0, fmt.Errorf("DHV_CAPACITY_MIN_BYTES is required for persistent volumes")
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parsing DHV_CAPACITY_MIN_BYTES=%q: %w", v, err)
+	}
+	if n <= 0 {
+		return 0, fmt.Errorf("DHV_CAPACITY_MIN_BYTES must be > 0")
+	}
+	return n, nil
+}
+
 func cmdCreate(cfg *Config) error {
 	volumeID, err := envRequired("DHV_VOLUME_ID")
 	if err != nil {
@@ -23,7 +62,11 @@ func cmdCreate(cfg *Config) error {
 
 	switch params.Type {
 	case "persistent":
-		return createPersistent(cfg, volumeID, params)
+		capacity, err := parseCapacity()
+		if err != nil {
+			return err
+		}
+		return createPersistent(cfg, volumeID, capacity, params.Filesystem)
 	case "snapshot":
 		return createSnapshot(cfg, volumeID, params)
 	default:
@@ -31,19 +74,7 @@ func cmdCreate(cfg *Config) error {
 	}
 }
 
-func createPersistent(cfg *Config, volumeID string, params *Params) error {
-	v := os.Getenv("DHV_CAPACITY_MIN_BYTES")
-	if v == "" {
-		return fmt.Errorf("capacity_min is required for persistent volumes")
-	}
-	capacity, err := strconv.ParseInt(v, 10, 64)
-	if err != nil {
-		return fmt.Errorf("parsing DHV_CAPACITY_MIN_BYTES=%q: %w", v, err)
-	}
-	if capacity <= 0 {
-		return fmt.Errorf("capacity_min must be greater than zero for persistent volumes")
-	}
-
+func createPersistent(cfg *Config, volumeID string, capacity int64, fs string) error {
 	if !lvExists(cfg.VolumeGroup, volumeID) {
 		if err := lvCreateThin(cfg.VolumeGroup, cfg.ThinPool, volumeID, capacity); err != nil {
 			return fmt.Errorf("lvcreate: %w", err)
@@ -52,7 +83,7 @@ func createPersistent(cfg *Config, volumeID string, params *Params) error {
 			_ = lvRemove(cfg.VolumeGroup, volumeID)
 			return fmt.Errorf("lvchange activate: %w", err)
 		}
-		if err := mkfs(params.Filesystem, cfg.LVPath(volumeID)); err != nil {
+		if err := mkfs(fs, cfg.LVPath(volumeID)); err != nil {
 			_ = lvRemove(cfg.VolumeGroup, volumeID)
 			return fmt.Errorf("mkfs: %w", err)
 		}

@@ -29,6 +29,7 @@ func lvCreateSnapshot(vg, source, name string) error {
 	return run("lvcreate",
 		"--snapshot",
 		"--name", name,
+		"--setactivationskip", "n",
 		origin,
 	)
 }

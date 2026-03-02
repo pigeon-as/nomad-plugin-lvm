@@ -1,39 +1,46 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
+
+	"github.com/pigeon-as/nomad-plugin-lvm/internal/lvm"
+	"github.com/pigeon-as/nomad-plugin-lvm/internal/plugin"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fatalf("usage: nomad-plugin-lvm <fingerprint|create|delete>")
+	op, err := plugin.Operation()
+	if err != nil {
+		fatalf("%v", err)
 	}
 
-	if os.Args[1] == "fingerprint" {
-		if err := cmdFingerprint(); err != nil {
+	// Fingerprint does not require config or LVM.
+	if op == "fingerprint" {
+		p := &plugin.Plugin{Stdout: os.Stdout}
+		if err := p.Fingerprint(); err != nil {
 			fatalf("fingerprint: %v", err)
 		}
 		return
 	}
 
-	cfg, err := loadConfig()
+	cfg, err := plugin.LoadConfig(os.Getenv("DHV_PLUGIN_DIR"))
 	if err != nil {
-		writeError(fmt.Errorf("config: %w", err))
+		plugin.WriteError(os.Stdout, fmt.Errorf("config: %w", err))
 		os.Exit(1)
 	}
 
-	switch os.Args[1] {
+	p := plugin.New(cfg, lvm.New(lvm.SystemRunner{}))
+
+	switch op {
 	case "create":
-		err = cmdCreate(cfg)
+		err = p.Create()
 	case "delete":
-		err = cmdDelete(cfg)
+		err = p.Delete()
 	default:
-		fatalf("unknown operation: %s", os.Args[1])
+		fatalf("unknown operation: %s", op)
 	}
 	if err != nil {
-		writeError(err)
+		plugin.WriteError(os.Stdout, err)
 		os.Exit(1)
 	}
 }
@@ -41,10 +48,4 @@ func main() {
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
-}
-
-func writeError(err error) {
-	if encErr := json.NewEncoder(os.Stdout).Encode(map[string]string{"error": err.Error()}); encErr != nil {
-		fmt.Fprintf(os.Stderr, "failed to write JSON error response: %v\n", encErr)
-	}
 }

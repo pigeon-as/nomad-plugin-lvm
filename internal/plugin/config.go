@@ -1,4 +1,4 @@
-package main
+package plugin
 
 import (
 	"encoding/json"
@@ -6,19 +6,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 )
 
-const (
-	pluginVersion  = "0.1.0"
-	configFileName = "nomad-plugin-lvm.json"
-)
+const configFileName = "nomad-plugin-lvm.json"
 
+// Config holds the plugin configuration read from disk.
 type Config struct {
 	VolumeGroup string `json:"volume_group"`
 	ThinPool    string `json:"thin_pool"`
 }
 
+// Validate checks that all required fields are present.
 func (c *Config) Validate() error {
 	if c.VolumeGroup == "" {
 		return errors.New("volume_group is required")
@@ -29,12 +27,14 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// LVPath returns the device path for a logical volume.
 func (c *Config) LVPath(name string) string {
 	return fmt.Sprintf("/dev/%s/%s", c.VolumeGroup, name)
 }
 
-func loadConfig() (*Config, error) {
-	pluginDir := os.Getenv("DHV_PLUGIN_DIR")
+// LoadConfig reads and validates the plugin config from pluginDir.
+// If pluginDir is empty it falls back to the directory of the running binary.
+func LoadConfig(pluginDir string) (*Config, error) {
 	if pluginDir == "" {
 		exe, err := os.Executable()
 		if err != nil {
@@ -59,21 +59,4 @@ func loadConfig() (*Config, error) {
 	}
 
 	return &cfg, nil
-}
-
-func envRequired(key string) (string, error) {
-	v := os.Getenv(key)
-	if v == "" {
-		return "", fmt.Errorf("required environment variable %s is not set", key)
-	}
-	return v, nil
-}
-
-var validLVNameRe = regexp.MustCompile(`^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$`)
-
-func validLVName(name string) error {
-	if !validLVNameRe.MatchString(name) {
-		return fmt.Errorf("invalid LV name: %q", name)
-	}
-	return nil
 }

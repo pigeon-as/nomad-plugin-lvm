@@ -61,30 +61,6 @@ func loadConfig() (*Config, error) {
 	return &cfg, nil
 }
 
-type Params struct {
-	Type       string `json:"type"`
-	Source     string `json:"source"`
-	Filesystem string `json:"filesystem"`
-}
-
-func parseParams() (*Params, error) {
-	raw := os.Getenv("DHV_PARAMETERS")
-	if raw == "" || raw == "{}" {
-		return &Params{Type: "persistent", Filesystem: "ext4"}, nil
-	}
-	var p Params
-	if err := json.Unmarshal([]byte(raw), &p); err != nil {
-		return nil, fmt.Errorf("parsing DHV_PARAMETERS: %w", err)
-	}
-	if p.Type == "" {
-		p.Type = "persistent"
-	}
-	if p.Filesystem == "" {
-		p.Filesystem = "ext4"
-	}
-	return &p, nil
-}
-
 func envRequired(key string) (string, error) {
 	v := os.Getenv(key)
 	if v == "" {

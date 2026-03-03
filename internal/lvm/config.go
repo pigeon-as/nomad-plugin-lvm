@@ -1,4 +1,4 @@
-package plugin
+package lvm
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 
 const configFileName = "nomad-plugin-lvm.json"
 
-// Config holds the plugin configuration read from disk.
+// Config holds the LVM plugin configuration read from disk.
 type Config struct {
 	VolumeGroup string `json:"volume_group"`
 	ThinPool    string `json:"thin_pool"`

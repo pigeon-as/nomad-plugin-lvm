@@ -1,6 +1,8 @@
-package plugin
+package lvm
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/shoenig/test/must"
@@ -59,7 +61,7 @@ func TestLoadConfig(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		dir := t.TempDir()
 		data := []byte(`{"volume_group":"vg","thin_pool":"pool"}`)
-		must.NoError(t, writeTestFile(dir, configFileName, data))
+		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), data, 0644))
 
 		cfg, err := LoadConfig(dir)
 		must.NoError(t, err)
@@ -69,7 +71,7 @@ func TestLoadConfig(t *testing.T) {
 
 	t.Run("invalid json", func(t *testing.T) {
 		dir := t.TempDir()
-		must.NoError(t, writeTestFile(dir, configFileName, []byte("not json")))
+		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), []byte("not json"), 0644))
 
 		_, err := LoadConfig(dir)
 		must.Error(t, err)
@@ -77,13 +79,9 @@ func TestLoadConfig(t *testing.T) {
 
 	t.Run("invalid config", func(t *testing.T) {
 		dir := t.TempDir()
-		must.NoError(t, writeTestFile(dir, configFileName, []byte(`{}`)))
+		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), []byte(`{}`), 0644))
 
 		_, err := LoadConfig(dir)
 		must.ErrorContains(t, err, "volume_group is required")
 	})
-}
-
-func writeTestFile(dir, name string, data []byte) error {
-	return writeFile(dir, name, data)
 }

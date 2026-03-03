@@ -21,7 +21,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := plugin.Run(lvm.NewPlugin(cfg, lvm.New(lvm.ExecCommand{})), req); err != nil {
+	if err := plugin.Run(lvm.NewPlugin(cfg, lvm.New(lvm.ExecCommand{}, cfg.BinPath)), req); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}

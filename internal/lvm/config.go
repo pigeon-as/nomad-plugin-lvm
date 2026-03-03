@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -14,6 +15,8 @@ const configFileName = "nomad-plugin-lvm.json"
 type Config struct {
 	VolumeGroup string `json:"volume_group"`
 	ThinPool    string `json:"thin_pool"`
+	BinPath     string `json:"bin_path"`
+	MountDir    string `json:"mount_dir"`
 }
 
 // Validate checks that all required fields are present.
@@ -24,12 +27,23 @@ func (c *Config) Validate() error {
 	if c.ThinPool == "" {
 		return errors.New("thin_pool is required")
 	}
+	if c.BinPath == "" {
+		c.BinPath = "/usr/sbin"
+	}
+	if c.MountDir == "" {
+		c.MountDir = "/opt/nomad-volumes"
+	}
 	return nil
 }
 
 // LVPath returns the device path for a logical volume.
 func (c *Config) LVPath(name string) string {
 	return fmt.Sprintf("/dev/%s/%s", c.VolumeGroup, name)
+}
+
+// MountPath returns the mount point directory for a volume.
+func (c *Config) MountPath(name string) string {
+	return path.Join(c.MountDir, name)
 }
 
 // LoadConfig reads and validates the plugin config from pluginDir.

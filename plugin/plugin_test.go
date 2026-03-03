@@ -72,16 +72,18 @@ func TestParseRequest_capacity(t *testing.T) {
 		t.Setenv(EnvOperation, "create")
 		t.Setenv(EnvCapacityMin, "0")
 		t.Setenv(EnvParameters, "")
-		_, err := ParseRequest()
-		must.ErrorContains(t, err, "must be > 0")
+		req, err := ParseRequest()
+		must.NoError(t, err)
+		must.Eq(t, int64(0), req.CapacityMin)
 	})
 
 	t.Run("negative", func(t *testing.T) {
 		t.Setenv(EnvOperation, "create")
 		t.Setenv(EnvCapacityMin, "-100")
 		t.Setenv(EnvParameters, "")
-		_, err := ParseRequest()
-		must.ErrorContains(t, err, "must be > 0")
+		req, err := ParseRequest()
+		must.NoError(t, err)
+		must.Eq(t, int64(-100), req.CapacityMin)
 	})
 }
 
@@ -134,4 +136,5 @@ func TestEnvConstants(t *testing.T) {
 	must.Eq(t, "DHV_VOLUME_ID", EnvVolumeID)
 	must.Eq(t, "DHV_CAPACITY_MIN_BYTES", EnvCapacityMin)
 	must.Eq(t, "DHV_PARAMETERS", EnvParameters)
+	must.Eq(t, "DHV_CREATED_PATH", EnvCreatedPath)
 }

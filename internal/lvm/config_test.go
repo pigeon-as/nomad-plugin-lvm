@@ -52,6 +52,11 @@ func TestLVPath(t *testing.T) {
 	must.Eq(t, "/dev/testvg/vol1", cfg.LVPath("vol1"))
 }
 
+func TestMountPath(t *testing.T) {
+	cfg := &Config{MountDir: "/opt/nomad-volumes"}
+	must.Eq(t, "/opt/nomad-volumes/vol1", cfg.MountPath("vol1"))
+}
+
 func TestLoadConfig(t *testing.T) {
 	t.Run("missing dir", func(t *testing.T) {
 		_, err := LoadConfig("/nonexistent/path")
@@ -67,6 +72,18 @@ func TestLoadConfig(t *testing.T) {
 		must.NoError(t, err)
 		must.Eq(t, "vg", cfg.VolumeGroup)
 		must.Eq(t, "pool", cfg.ThinPool)
+		must.Eq(t, "/usr/sbin", cfg.BinPath)
+		must.Eq(t, "/opt/nomad-volumes", cfg.MountDir)
+	})
+
+	t.Run("custom bin_path", func(t *testing.T) {
+		dir := t.TempDir()
+		data := []byte(`{"volume_group":"vg","thin_pool":"pool","bin_path":"/usr/local/sbin"}`)
+		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), data, 0644))
+
+		cfg, err := LoadConfig(dir)
+		must.NoError(t, err)
+		must.Eq(t, "/usr/local/sbin", cfg.BinPath)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {

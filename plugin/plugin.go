@@ -20,6 +20,7 @@ const (
 	EnvVolumeID    = "DHV_VOLUME_ID"
 	EnvCapacityMin = "DHV_CAPACITY_MIN_BYTES"
 	EnvParameters  = "DHV_PARAMETERS"
+	EnvCreatedPath = "DHV_CREATED_PATH"
 )
 
 // Plugin is the interface that a Nomad Dynamic Host Volume plugin must implement.
@@ -75,9 +76,6 @@ func ParseRequest() (*Request, error) {
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
 			return nil, fmt.Errorf("parsing %s=%q: %w", EnvCapacityMin, v, err)
-		}
-		if n <= 0 {
-			return nil, fmt.Errorf("%s must be > 0", EnvCapacityMin)
 		}
 		req.CapacityMin = n
 	}

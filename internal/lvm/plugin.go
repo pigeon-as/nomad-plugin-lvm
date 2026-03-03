@@ -2,6 +2,7 @@ package lvm
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/pigeon-as/nomad-plugin-lvm/plugin"
 )
@@ -58,11 +59,20 @@ func (p *LVMPlugin) Delete(req *plugin.Request) error {
 	if err := ValidateName(req.VolumeID); err != nil {
 		return err
 	}
+
+	// Best-effort unmount before removal.
+	mountPath := p.Config.MountPath(req.VolumeID)
+	_ = p.LVM.Unmount(mountPath)
+	_ = os.Remove(mountPath)
+
 	return p.LVM.Remove(p.Config.VolumeGroup, req.VolumeID)
 }
 
 func (p *LVMPlugin) createPersistent(volumeID string, capacity int64, fs string) (*plugin.CreateResponse, error) {
 	vg := p.Config.VolumeGroup
+	devPath := p.Config.LVPath(volumeID)
+	mountPath := p.Config.MountPath(volumeID)
+
 	if !p.LVM.Exists(vg, volumeID) {
 		if err := p.LVM.CreateThin(vg, p.Config.ThinPool, volumeID, capacity); err != nil {
 			return nil, fmt.Errorf("lvcreate: %w", err)
@@ -71,16 +81,27 @@ func (p *LVMPlugin) createPersistent(volumeID string, capacity int64, fs string)
 			_ = p.LVM.Remove(vg, volumeID)
 			return nil, fmt.Errorf("lvchange activate: %w", err)
 		}
-		if err := p.LVM.MakeFilesystem(fs, p.Config.LVPath(volumeID)); err != nil {
+		if err := p.LVM.MakeFilesystem(fs, devPath); err != nil {
 			_ = p.LVM.Remove(vg, volumeID)
 			return nil, fmt.Errorf("mkfs: %w", err)
 		}
 	}
+
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
+	}
+	if err := p.LVM.Mount(devPath, mountPath); err != nil {
+		return nil, fmt.Errorf("mount: %w", err)
+	}
+
 	return p.createResponse(volumeID)
 }
 
 func (p *LVMPlugin) createSnapshot(volumeID string, params *plugin.Params) (*plugin.CreateResponse, error) {
 	vg := p.Config.VolumeGroup
+	devPath := p.Config.LVPath(volumeID)
+	mountPath := p.Config.MountPath(volumeID)
+
 	if params.Source == "" {
 		return nil, fmt.Errorf("source is required for snapshot volumes")
 	}
@@ -99,14 +120,22 @@ func (p *LVMPlugin) createSnapshot(volumeID string, params *plugin.Params) (*plu
 			return nil, fmt.Errorf("lvchange activate: %w", err)
 		}
 	}
+
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
+	}
+	if err := p.LVM.Mount(devPath, mountPath); err != nil {
+		return nil, fmt.Errorf("mount: %w", err)
+	}
+
 	return p.createResponse(volumeID)
 }
 
 func (p *LVMPlugin) createResponse(volumeID string) (*plugin.CreateResponse, error) {
-	path := p.Config.LVPath(volumeID)
+	mountPath := p.Config.MountPath(volumeID)
 	size, err := p.LVM.SizeBytes(p.Config.VolumeGroup, volumeID)
 	if err != nil {
 		return nil, fmt.Errorf("getting volume size: %w", err)
 	}
-	return &plugin.CreateResponse{Path: path, Bytes: size}, nil
+	return &plugin.CreateResponse{Path: mountPath, Bytes: size}, nil
 }

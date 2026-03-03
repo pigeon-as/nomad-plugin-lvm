@@ -7,21 +7,21 @@ import (
 	"github.com/shoenig/test/must"
 )
 
-// mockRunner records commands and returns pre-configured results.
-type mockRunner struct {
+// mockExec records commands and returns pre-configured results.
+type mockExec struct {
 	commands []string
 	outputs  map[string]string
 	errors   map[string]error
 }
 
-func newMockRunner() *mockRunner {
-	return &mockRunner{
+func newMockExec() *mockExec {
+	return &mockExec{
 		outputs: make(map[string]string),
 		errors:  make(map[string]error),
 	}
 }
 
-func (m *mockRunner) key(name string, args ...string) string {
+func (m *mockExec) key(name string, args ...string) string {
 	k := name
 	for _, a := range args {
 		k += " " + a
@@ -29,12 +29,12 @@ func (m *mockRunner) key(name string, args ...string) string {
 	return k
 }
 
-func (m *mockRunner) Run(name string, args ...string) error {
+func (m *mockExec) Run(name string, args ...string) error {
 	_, err := m.Output(name, args...)
 	return err
 }
 
-func (m *mockRunner) Output(name string, args ...string) (string, error) {
+func (m *mockExec) Output(name string, args ...string) (string, error) {
 	k := m.key(name, args...)
 	m.commands = append(m.commands, k)
 	if err, ok := m.errors[k]; ok {
@@ -46,16 +46,16 @@ func (m *mockRunner) Output(name string, args ...string) (string, error) {
 	return "", nil
 }
 
-func (m *mockRunner) whenOutput(output string, name string, args ...string) {
+func (m *mockExec) whenOutput(output string, name string, args ...string) {
 	m.outputs[m.key(name, args...)] = output
 }
 
-func (m *mockRunner) whenError(err error, name string, args ...string) {
+func (m *mockExec) whenError(err error, name string, args ...string) {
 	m.errors[m.key(name, args...)] = err
 }
 
 func TestExists(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	t.Run("exists", func(t *testing.T) {
@@ -69,7 +69,7 @@ func TestExists(t *testing.T) {
 }
 
 func TestCreateThin(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	err := c.CreateThin("myvg", "mypool", "vol1", 1048576)
@@ -80,7 +80,7 @@ func TestCreateThin(t *testing.T) {
 }
 
 func TestCreateSnapshot(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	err := c.CreateSnapshot("myvg", "source", "snap1")
@@ -91,7 +91,7 @@ func TestCreateSnapshot(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	t.Run("exists and removed", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestRemove(t *testing.T) {
 }
 
 func TestActivate(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	err := c.Activate("myvg", "vol1")
@@ -118,7 +118,7 @@ func TestActivate(t *testing.T) {
 }
 
 func TestSizeBytes(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	m.whenOutput("  10485760\n", "lvs",
@@ -132,7 +132,7 @@ func TestSizeBytes(t *testing.T) {
 }
 
 func TestSizeBytes_error(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	m.whenError(fmt.Errorf("lvs failed"), "lvs",
@@ -145,7 +145,7 @@ func TestSizeBytes_error(t *testing.T) {
 }
 
 func TestMakeFilesystem(t *testing.T) {
-	m := newMockRunner()
+	m := newMockExec()
 	c := New(m)
 
 	t.Run("ext4", func(t *testing.T) {

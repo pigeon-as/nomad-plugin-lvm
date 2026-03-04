@@ -105,6 +105,7 @@ func (p *LVMPlugin) createPersistent(cfg *Config, volumeID string, capacity int6
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
 	}
+	_ = p.LVM.Unmount(mountPath) // idempotent: no-op if not mounted
 	if err := p.LVM.Mount(devPath, mountPath); err != nil {
 		return nil, fmt.Errorf("mount: %w", err)
 	}
@@ -143,6 +144,7 @@ func (p *LVMPlugin) createSnapshot(cfg *Config, volumeID string, params *plugin.
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
 	}
+	_ = p.LVM.Unmount(mountPath) // idempotent: no-op if not mounted
 	if err := p.LVM.Mount(devPath, mountPath); err != nil {
 		return nil, fmt.Errorf("mount: %w", err)
 	}

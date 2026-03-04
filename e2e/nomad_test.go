@@ -21,7 +21,7 @@ import (
 	"github.com/shoenig/test/must"
 )
 
-// Must match e2e/nomad-plugin-lvm.json.
+// Must match the parameters in e2e/volumes/*.hcl.
 const (
 	vg       = "e2e-vg"
 	pool     = "thinpool"
@@ -40,11 +40,16 @@ var volIDRe = regexp.MustCompile(`(?i)with ID\s+(\S+)`)
 func TestMain(m *testing.M) {
 	setupLVM()
 	code := m.Run()
+	cleanupNomadVolumes()
 	cleanupLVM()
 	os.Exit(code)
 }
 
 func setupLVM() {
+	// Purge any Nomad host volumes left over from a previous run
+	// (the Nomad dev agent survives between test runs).
+	cleanupNomadVolumes()
+
 	// Tear down any leftovers from a previous failed run.
 	cleanupLVM()
 
@@ -59,8 +64,36 @@ func setupLVM() {
 	mustShell("lvcreate", "--type", "thin-pool", "--name", pool, "--size", "900M", vg)
 }
 
+// cleanupNomadVolumes deletes every Nomad host volume so a fresh test run
+// doesn't collide with stale registrations from a previous run.  Because
+// make dev keeps the agent alive between runs, Nomad still knows about
+// volumes whose backing LVs have already been torn down.
+func cleanupNomadVolumes() {
+	out, err := shell("nomad", "volume", "status", "-type", "host", "-verbose")
+	if err != nil {
+		return // Nomad not reachable — nothing to clean.
+	}
+	// Each non-header line starts with the volume name; the second column
+	// is the full-length ID when -verbose is given.
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		id := fields[1]
+		// Skip the header row.
+		if id == "ID" {
+			continue
+		}
+		shell("nomad", "volume", "delete", "-type", "host", id) //nolint:errcheck
+	}
+}
+
 func cleanupLVM() {
 	destroyVG(vg)
+
+	// Remove stale mount directory from previous runs.
+	os.RemoveAll(mountDir)
 
 	dev := loopDev
 	if dev == "" {
@@ -187,8 +220,11 @@ capability {
 }
 
 parameters {
-  type   = "snapshot"
-  source = %q
+  type         = "snapshot"
+  source       = %q
+  volume_group = "e2e-vg"
+  thin_pool    = "thinpool"
+  mount_dir    = "/tmp/nomad-volumes"
 }
 `, sourceVolID)
 	path := filepath.Join(t.TempDir(), "snapshot.hcl")

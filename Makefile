@@ -14,7 +14,6 @@ e2e:
 
 dev: build
 	install -D build/$(PLUGIN_NAME) $(PLUGIN_DIR)/$(PLUGIN_NAME)
-	cp e2e/$(PLUGIN_NAME).json $(PLUGIN_DIR)/$(PLUGIN_NAME).json
 	sudo nomad agent -dev -config=$(abspath e2e/agent.hcl)
 
 clean:

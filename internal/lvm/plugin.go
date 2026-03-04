@@ -11,17 +11,18 @@ import (
 const Version = "0.1.0"
 
 // LVMPlugin implements plugin.Plugin using LVM thin provisioning.
+// Configuration (volume group, thin pool, etc.) is read from the
+// request parameters on each Create/Delete call.
 type LVMPlugin struct {
-	Config *Config
-	LVM    *Client
+	LVM *Client
 }
 
 // compile-time check that LVMPlugin implements plugin.Plugin.
 var _ plugin.Plugin = (*LVMPlugin)(nil)
 
-// NewPlugin creates an LVMPlugin with the given config and LVM client.
-func NewPlugin(cfg *Config, client *Client) *LVMPlugin {
-	return &LVMPlugin{Config: cfg, LVM: client}
+// NewPlugin creates an LVMPlugin with the given LVM client.
+func NewPlugin(client *Client) *LVMPlugin {
+	return &LVMPlugin{LVM: client}
 }
 
 // Fingerprint returns the plugin version.
@@ -38,14 +39,19 @@ func (p *LVMPlugin) Create(req *plugin.Request) (*plugin.CreateResponse, error) 
 		return nil, err
 	}
 
+	cfg, err := ConfigFromParams(&req.Parameters)
+	if err != nil {
+		return nil, err
+	}
+
 	switch req.Parameters.Type {
 	case "persistent":
 		if req.CapacityMin <= 0 {
 			return nil, fmt.Errorf("%s is required for persistent volumes", plugin.EnvCapacityMin)
 		}
-		return p.createPersistent(req.VolumeID, req.CapacityMin, req.Parameters.Filesystem)
+		return p.createPersistent(cfg, req.VolumeID, req.CapacityMin, &req.Parameters)
 	case "snapshot":
-		return p.createSnapshot(req.VolumeID, &req.Parameters)
+		return p.createSnapshot(cfg, req.VolumeID, &req.Parameters)
 	default:
 		return nil, fmt.Errorf("unknown volume type %q (expected persistent or snapshot)", req.Parameters.Type)
 	}
@@ -60,33 +66,42 @@ func (p *LVMPlugin) Delete(req *plugin.Request) error {
 		return err
 	}
 
+	cfg, err := ConfigFromParams(&req.Parameters)
+	if err != nil {
+		return err
+	}
+
 	// Best-effort unmount before removal.
-	mountPath := p.Config.MountPath(req.VolumeID)
+	mountPath := cfg.MountPath(req.VolumeID)
 	_ = p.LVM.Unmount(mountPath)
 	_ = os.Remove(mountPath)
 
-	return p.LVM.Remove(p.Config.VolumeGroup, req.VolumeID)
+	return p.LVM.Remove(cfg.VolumeGroup, req.VolumeID)
 }
 
-func (p *LVMPlugin) createPersistent(volumeID string, capacity int64, fs string) (*plugin.CreateResponse, error) {
-	vg := p.Config.VolumeGroup
-	devPath := p.Config.LVPath(volumeID)
-	mountPath := p.Config.MountPath(volumeID)
+func (p *LVMPlugin) createPersistent(cfg *Config, volumeID string, capacity int64, params *plugin.Params) (*plugin.CreateResponse, error) {
+	vg := cfg.VolumeGroup
+	devPath := cfg.LVPath(volumeID)
 
 	if !p.LVM.Exists(vg, volumeID) {
-		if err := p.LVM.CreateThin(vg, p.Config.ThinPool, volumeID, capacity); err != nil {
+		if err := p.LVM.CreateThin(vg, cfg.ThinPool, volumeID, capacity); err != nil {
 			return nil, fmt.Errorf("lvcreate: %w", err)
 		}
 		if err := p.LVM.Activate(vg, volumeID); err != nil {
 			_ = p.LVM.Remove(vg, volumeID)
 			return nil, fmt.Errorf("lvchange activate: %w", err)
 		}
-		if err := p.LVM.MakeFilesystem(fs, devPath); err != nil {
+		if err := p.LVM.MakeFilesystem(params.Filesystem, devPath); err != nil {
 			_ = p.LVM.Remove(vg, volumeID)
 			return nil, fmt.Errorf("mkfs: %w", err)
 		}
 	}
 
+	if params.Mode == "block" {
+		return p.createResponse(cfg, volumeID, params.Mode)
+	}
+
+	mountPath := cfg.MountPath(volumeID)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
 	}
@@ -94,13 +109,11 @@ func (p *LVMPlugin) createPersistent(volumeID string, capacity int64, fs string)
 		return nil, fmt.Errorf("mount: %w", err)
 	}
 
-	return p.createResponse(volumeID)
+	return p.createResponse(cfg, volumeID, params.Mode)
 }
 
-func (p *LVMPlugin) createSnapshot(volumeID string, params *plugin.Params) (*plugin.CreateResponse, error) {
-	vg := p.Config.VolumeGroup
-	devPath := p.Config.LVPath(volumeID)
-	mountPath := p.Config.MountPath(volumeID)
+func (p *LVMPlugin) createSnapshot(cfg *Config, volumeID string, params *plugin.Params) (*plugin.CreateResponse, error) {
+	vg := cfg.VolumeGroup
 
 	if params.Source == "" {
 		return nil, fmt.Errorf("source is required for snapshot volumes")
@@ -121,6 +134,12 @@ func (p *LVMPlugin) createSnapshot(volumeID string, params *plugin.Params) (*plu
 		}
 	}
 
+	if params.Mode == "block" {
+		return p.createResponse(cfg, volumeID, params.Mode)
+	}
+
+	devPath := cfg.LVPath(volumeID)
+	mountPath := cfg.MountPath(volumeID)
 	if err := os.MkdirAll(mountPath, 0755); err != nil {
 		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
 	}
@@ -128,14 +147,17 @@ func (p *LVMPlugin) createSnapshot(volumeID string, params *plugin.Params) (*plu
 		return nil, fmt.Errorf("mount: %w", err)
 	}
 
-	return p.createResponse(volumeID)
+	return p.createResponse(cfg, volumeID, params.Mode)
 }
 
-func (p *LVMPlugin) createResponse(volumeID string) (*plugin.CreateResponse, error) {
-	mountPath := p.Config.MountPath(volumeID)
-	size, err := p.LVM.SizeBytes(p.Config.VolumeGroup, volumeID)
+func (p *LVMPlugin) createResponse(cfg *Config, volumeID, mode string) (*plugin.CreateResponse, error) {
+	size, err := p.LVM.SizeBytes(cfg.VolumeGroup, volumeID)
 	if err != nil {
 		return nil, fmt.Errorf("getting volume size: %w", err)
 	}
-	return &plugin.CreateResponse{Path: mountPath, Bytes: size}, nil
+	resPath := cfg.MountPath(volumeID)
+	if mode == "block" {
+		resPath = cfg.LVPath(volumeID)
+	}
+	return &plugin.CreateResponse{Path: resPath, Bytes: size}, nil
 }

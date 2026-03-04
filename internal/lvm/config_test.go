@@ -1,50 +1,53 @@
 package lvm
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
+	"github.com/pigeon-as/nomad-plugin-lvm/plugin"
 	"github.com/shoenig/test/must"
 )
 
-func TestConfigValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		config  Config
-		wantErr string
-	}{
-		{
-			name:   "valid",
-			config: Config{VolumeGroup: "myvg", ThinPool: "mypool"},
-		},
-		{
-			name:    "missing volume_group",
-			config:  Config{ThinPool: "mypool"},
-			wantErr: "volume_group is required",
-		},
-		{
-			name:    "missing thin_pool",
-			config:  Config{VolumeGroup: "myvg"},
-			wantErr: "thin_pool is required",
-		},
-		{
-			name:    "both missing",
-			config:  Config{},
-			wantErr: "volume_group is required",
-		},
-	}
+func TestConfigFromParams(t *testing.T) {
+	t.Run("valid minimal with defaults", func(t *testing.T) {
+		p := &plugin.Params{VolumeGroup: "myvg", ThinPool: "mypool"}
+		cfg, err := ConfigFromParams(p)
+		must.NoError(t, err)
+		must.Eq(t, "myvg", cfg.VolumeGroup)
+		must.Eq(t, "mypool", cfg.ThinPool)
+		must.Eq(t, "/srv/nomad-volumes", cfg.MountDir)
+		must.Eq(t, "/usr/sbin", cfg.BinPath)
+	})
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := tc.config.Validate()
-			if tc.wantErr != "" {
-				must.ErrorContains(t, err, tc.wantErr)
-			} else {
-				must.NoError(t, err)
-			}
-		})
-	}
+	t.Run("all params explicit", func(t *testing.T) {
+		p := &plugin.Params{
+			VolumeGroup: "myvg",
+			ThinPool:    "mypool",
+			MountDir:    "/custom/mounts",
+			BinPath:     "/nix/store/lvm2/bin",
+		}
+		cfg, err := ConfigFromParams(p)
+		must.NoError(t, err)
+		must.Eq(t, "/custom/mounts", cfg.MountDir)
+		must.Eq(t, "/nix/store/lvm2/bin", cfg.BinPath)
+	})
+
+	t.Run("missing volume_group", func(t *testing.T) {
+		p := &plugin.Params{ThinPool: "mypool"}
+		_, err := ConfigFromParams(p)
+		must.ErrorContains(t, err, "volume_group is required")
+	})
+
+	t.Run("missing thin_pool", func(t *testing.T) {
+		p := &plugin.Params{VolumeGroup: "myvg"}
+		_, err := ConfigFromParams(p)
+		must.ErrorContains(t, err, "thin_pool is required")
+	})
+
+	t.Run("both missing", func(t *testing.T) {
+		p := &plugin.Params{}
+		_, err := ConfigFromParams(p)
+		must.ErrorContains(t, err, "volume_group is required")
+	})
 }
 
 func TestLVPath(t *testing.T) {
@@ -55,50 +58,4 @@ func TestLVPath(t *testing.T) {
 func TestMountPath(t *testing.T) {
 	cfg := &Config{MountDir: "/opt/nomad-volumes"}
 	must.Eq(t, "/opt/nomad-volumes/vol1", cfg.MountPath("vol1"))
-}
-
-func TestLoadConfig(t *testing.T) {
-	t.Run("missing dir", func(t *testing.T) {
-		_, err := LoadConfig("/nonexistent/path")
-		must.Error(t, err)
-	})
-
-	t.Run("valid config", func(t *testing.T) {
-		dir := t.TempDir()
-		data := []byte(`{"volume_group":"vg","thin_pool":"pool"}`)
-		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), data, 0644))
-
-		cfg, err := LoadConfig(dir)
-		must.NoError(t, err)
-		must.Eq(t, "vg", cfg.VolumeGroup)
-		must.Eq(t, "pool", cfg.ThinPool)
-		must.Eq(t, "/usr/sbin", cfg.BinPath)
-		must.Eq(t, "/opt/nomad-volumes", cfg.MountDir)
-	})
-
-	t.Run("custom bin_path", func(t *testing.T) {
-		dir := t.TempDir()
-		data := []byte(`{"volume_group":"vg","thin_pool":"pool","bin_path":"/usr/local/sbin"}`)
-		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), data, 0644))
-
-		cfg, err := LoadConfig(dir)
-		must.NoError(t, err)
-		must.Eq(t, "/usr/local/sbin", cfg.BinPath)
-	})
-
-	t.Run("invalid json", func(t *testing.T) {
-		dir := t.TempDir()
-		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), []byte("not json"), 0644))
-
-		_, err := LoadConfig(dir)
-		must.Error(t, err)
-	})
-
-	t.Run("invalid config", func(t *testing.T) {
-		dir := t.TempDir()
-		must.NoError(t, os.WriteFile(filepath.Join(dir, configFileName), []byte(`{}`), 0644))
-
-		_, err := LoadConfig(dir)
-		must.ErrorContains(t, err, "volume_group is required")
-	})
 }

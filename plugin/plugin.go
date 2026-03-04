@@ -40,10 +40,22 @@ type Request struct {
 }
 
 // Params represents the DHV_PARAMETERS JSON payload sent by Nomad.
+// Per-volume fields (Type, Source, Filesystem, Mode) control volume
+// behaviour.  Plugin-level fields (VolumeGroup, ThinPool, MountDir,
+// BinPath) configure the underlying storage backend and are set in
+// the volume definition's parameters {} block or via LVM_* environment
+// variables on the node.
 type Params struct {
 	Type       string `json:"type"`
 	Source     string `json:"source"`
 	Filesystem string `json:"filesystem"`
+	Mode       string `json:"mode"`
+
+	// Plugin configuration — passed through parameters {} or LVM_* env vars.
+	VolumeGroup string `json:"volume_group"`
+	ThinPool    string `json:"thin_pool"`
+	MountDir    string `json:"mount_dir"`
+	BinPath     string `json:"bin_path"`
 }
 
 // FingerprintResponse is returned by Fingerprint.
@@ -132,7 +144,7 @@ func Run(p Plugin, req *Request) error {
 
 func parseParams(raw string) (*Params, error) {
 	if raw == "" || raw == "{}" {
-		return &Params{Type: "persistent", Filesystem: "ext4"}, nil
+		return &Params{Type: "persistent", Filesystem: "ext4", Mode: "filesystem"}, nil
 	}
 	var p Params
 	if err := json.Unmarshal([]byte(raw), &p); err != nil {
@@ -143,6 +155,12 @@ func parseParams(raw string) (*Params, error) {
 	}
 	if p.Filesystem == "" {
 		p.Filesystem = "ext4"
+	}
+	if p.Mode == "" {
+		p.Mode = "filesystem"
+	}
+	if p.Mode != "filesystem" && p.Mode != "block" {
+		return nil, fmt.Errorf("invalid mode %q (expected filesystem or block)", p.Mode)
 	}
 	return &p, nil
 }

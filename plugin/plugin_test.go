@@ -97,6 +97,7 @@ func TestParseRequest_parameters(t *testing.T) {
 		must.NoError(t, err)
 		must.Eq(t, "persistent", req.Parameters.Type)
 		must.Eq(t, "ext4", req.Parameters.Filesystem)
+		must.Eq(t, "filesystem", req.Parameters.Mode)
 	})
 
 	t.Run("empty object", func(t *testing.T) {
@@ -107,17 +108,20 @@ func TestParseRequest_parameters(t *testing.T) {
 		req, err := ParseRequest()
 		must.NoError(t, err)
 		must.Eq(t, "persistent", req.Parameters.Type)
+		must.Eq(t, "filesystem", req.Parameters.Mode)
 	})
 
 	t.Run("snapshot with source", func(t *testing.T) {
 		t.Setenv(EnvOperation, "create")
 		t.Setenv(EnvVolumeID, "")
 		t.Setenv(EnvCapacityMin, "")
-		t.Setenv(EnvParameters, `{"type":"snapshot","source":"golden"}`)
+		t.Setenv(EnvParameters, `{"type":"snapshot","source":"golden","volume_group":"vg","thin_pool":"pool"}`)
 		req, err := ParseRequest()
 		must.NoError(t, err)
 		must.Eq(t, "snapshot", req.Parameters.Type)
 		must.Eq(t, "golden", req.Parameters.Source)
+		must.Eq(t, "vg", req.Parameters.VolumeGroup)
+		must.Eq(t, "pool", req.Parameters.ThinPool)
 	})
 
 	t.Run("invalid json", func(t *testing.T) {
@@ -126,6 +130,25 @@ func TestParseRequest_parameters(t *testing.T) {
 		t.Setenv(EnvParameters, "not json")
 		_, err := ParseRequest()
 		must.Error(t, err)
+	})
+
+	t.Run("block mode", func(t *testing.T) {
+		t.Setenv(EnvOperation, "create")
+		t.Setenv(EnvVolumeID, "")
+		t.Setenv(EnvCapacityMin, "")
+		t.Setenv(EnvParameters, `{"mode":"block"}`)
+		req, err := ParseRequest()
+		must.NoError(t, err)
+		must.Eq(t, "block", req.Parameters.Mode)
+	})
+
+	t.Run("invalid mode", func(t *testing.T) {
+		t.Setenv(EnvOperation, "create")
+		t.Setenv(EnvVolumeID, "")
+		t.Setenv(EnvCapacityMin, "")
+		t.Setenv(EnvParameters, `{"mode":"raw"}`)
+		_, err := ParseRequest()
+		must.ErrorContains(t, err, "invalid mode")
 	})
 }
 

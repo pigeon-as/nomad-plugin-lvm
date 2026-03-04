@@ -11,6 +11,9 @@ capacity_min = "10MiB"
 capacity_max = "50MiB"
 
 parameters {
-  type       = "persistent"
-  filesystem = "ext4"
+  type         = "persistent"
+  filesystem   = "ext4"
+  volume_group = "e2e-vg"
+  thin_pool    = "thinpool"
+  mount_dir    = "/tmp/nomad-volumes"
 }

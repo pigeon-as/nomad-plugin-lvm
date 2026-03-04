@@ -15,13 +15,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg, err := lvm.LoadConfig(os.Getenv(plugin.EnvPluginDir))
-	if req.Operation != "fingerprint" && err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v\n", err)
-		os.Exit(1)
+	// For fingerprint, config may not be available yet — we only
+	// need the LVM client for create/delete operations.
+	var cfg *lvm.Config
+	if req.Operation != "fingerprint" {
+		cfg, err = lvm.ConfigFromParams(&req.Parameters)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "config: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
-	if err := plugin.Run(lvm.NewPlugin(cfg, lvm.New(lvm.ExecCommand{}, cfg.BinPath)), req); err != nil {
+	binPath := "/usr/sbin"
+	if cfg != nil {
+		binPath = cfg.BinPath
+	}
+	p := lvm.NewPlugin(lvm.New(lvm.ExecCommand{}, binPath))
+
+	if err := plugin.Run(p, req); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}

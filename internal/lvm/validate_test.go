@@ -16,7 +16,7 @@ func TestValidateName(t *testing.T) {
 		{"with dots", "my.volume", false},
 		{"with dashes", "my-volume", false},
 		{"with underscores", "my_volume", false},
-		{"leading dot", ".hidden", false},
+		{"leading dot", ".hidden", true},
 		{"leading underscore", "_internal", false},
 		{"numeric", "123", false},
 		{"empty", "", true},

@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-var validNameRe = regexp.MustCompile(`^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$`)
+var validNameRe = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$`)
 
 // ValidateName checks whether a string is a valid LVM logical volume name.
 func ValidateName(name string) error {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -46,30 +45,40 @@ func ValidateName(name string) error {
 	return nil
 }
 
+// requiredBins are resolved via exec.LookPath at startup.
+var requiredBins = []string{"lvs", "lvcreate", "lvremove", "lvchange", "mkfs.ext4", "mount", "umount"}
+
 // Client wraps LVM command-line operations.
 type Client struct {
-	exec    Exec
-	binPath string
+	exec Exec
+	bins map[string]string // command name → resolved absolute path
 }
 
-func (c *Client) bin(name string) string {
-	return filepath.Join(c.binPath, name)
-}
-
-// NewClient creates a Client that resolves binaries from binPath.
-func NewClient(exec Exec, binPath string) *Client {
-	return &Client{exec: exec, binPath: binPath}
+// NewClient resolves all required binaries via exec.LookPath and returns
+// a Client that uses the resolved absolute paths. Nomad DHV plugins are
+// launched with a stripped environment (no PATH), so callers should ensure
+// PATH is set before calling NewClient.
+func NewClient(e Exec) (*Client, error) {
+	bins := make(map[string]string, len(requiredBins))
+	for _, name := range requiredBins {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			return nil, fmt.Errorf("required binary %q not found in PATH: %w", name, err)
+		}
+		bins[name] = path
+	}
+	return &Client{exec: e, bins: bins}, nil
 }
 
 // Exists checks whether a logical volume exists.
 func (c *Client) Exists(vg, lv string) bool {
-	return c.exec.Run(c.bin("lvs"), "--noheadings", "--nosuffix", fmt.Sprintf("%s/%s", vg, lv)) == nil
+	return c.exec.Run(c.bins["lvs"], "--noheadings", "--nosuffix", fmt.Sprintf("%s/%s", vg, lv)) == nil
 }
 
 // CreateThin creates a thin-provisioned logical volume.
 func (c *Client) CreateThin(vg, thinPool, name string, sizeBytes int64) error {
 	size := fmt.Sprintf("%db", sizeBytes)
-	return c.exec.Run(c.bin("lvcreate"),
+	return c.exec.Run(c.bins["lvcreate"],
 		"--thin",
 		"--virtualsize", size,
 		"--thinpool", thinPool,
@@ -81,7 +90,7 @@ func (c *Client) CreateThin(vg, thinPool, name string, sizeBytes int64) error {
 // CreateSnapshot creates an LVM snapshot of an existing volume.
 func (c *Client) CreateSnapshot(vg, source, name string) error {
 	origin := fmt.Sprintf("%s/%s", vg, source)
-	return c.exec.Run(c.bin("lvcreate"),
+	return c.exec.Run(c.bins["lvcreate"],
 		"--snapshot",
 		"--name", name,
 		"--setactivationskip", "n",
@@ -94,17 +103,17 @@ func (c *Client) Remove(vg, name string) error {
 	if !c.Exists(vg, name) {
 		return nil
 	}
-	return c.exec.Run(c.bin("lvremove"), "--force", fmt.Sprintf("%s/%s", vg, name))
+	return c.exec.Run(c.bins["lvremove"], "--force", fmt.Sprintf("%s/%s", vg, name))
 }
 
 // Activate activates a logical volume.
 func (c *Client) Activate(vg, name string) error {
-	return c.exec.Run(c.bin("lvchange"), "--activate", "y", fmt.Sprintf("%s/%s", vg, name))
+	return c.exec.Run(c.bins["lvchange"], "--activate", "y", fmt.Sprintf("%s/%s", vg, name))
 }
 
 // SizeBytes returns the size of a logical volume in bytes.
 func (c *Client) SizeBytes(vg, name string) (int64, error) {
-	out, err := c.exec.Output(c.bin("lvs"),
+	out, err := c.exec.Output(c.bins["lvs"],
 		"--noheadings", "--nosuffix", "--units", "b",
 		"--options", "lv_size",
 		fmt.Sprintf("%s/%s", vg, name),
@@ -124,15 +133,15 @@ func (c *Client) MakeFilesystem(fsType, device string) error {
 	if fsType != "ext4" {
 		return fmt.Errorf("unsupported filesystem type: %q", fsType)
 	}
-	return c.exec.Run(c.bin("mkfs.ext4"), "-q", device)
+	return c.exec.Run(c.bins["mkfs.ext4"], "-q", device)
 }
 
 // Mount mounts a device at the given target directory.
 func (c *Client) Mount(device, target string) error {
-	return c.exec.Run(c.bin("mount"), device, target)
+	return c.exec.Run(c.bins["mount"], device, target)
 }
 
 // Unmount unmounts the given mount point.
 func (c *Client) Unmount(target string) error {
-	return c.exec.Run(c.bin("umount"), target)
+	return c.exec.Run(c.bins["umount"], target)
 }

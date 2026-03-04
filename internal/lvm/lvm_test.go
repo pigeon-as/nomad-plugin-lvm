@@ -7,7 +7,15 @@ import (
 	"github.com/shoenig/test/must"
 )
 
-const testBinPath = "/usr/sbin"
+// newTestClient creates a Client with a mock Exec for unit testing.
+// Uses bare command names as resolved paths since the mock matches by full string.
+func newTestClient(m *mockExec) *Client {
+	bins := make(map[string]string, len(requiredBins))
+	for _, name := range requiredBins {
+		bins[name] = name
+	}
+	return &Client{exec: m, bins: bins}
+}
 
 // mockExec records commands and returns pre-configured results.
 type mockExec struct {
@@ -58,21 +66,21 @@ func (m *mockExec) whenError(err error, name string, args ...string) {
 
 func TestExists(t *testing.T) {
 	m := newMockExec()
-	c := NewClient(m, testBinPath)
+	c := newTestClient(m)
 
 	t.Run("exists", func(t *testing.T) {
 		must.True(t, c.Exists("myvg", "mylv"))
 	})
 
 	t.Run("not exists", func(t *testing.T) {
-		m.whenError(fmt.Errorf("not found"), "/usr/sbin/lvs", "--noheadings", "--nosuffix", "myvg/missing")
+		m.whenError(fmt.Errorf("not found"), "lvs", "--noheadings", "--nosuffix", "myvg/missing")
 		must.False(t, c.Exists("myvg", "missing"))
 	})
 }
 
 func TestRemove(t *testing.T) {
 	m := newMockExec()
-	c := NewClient(m, testBinPath)
+	c := newTestClient(m)
 
 	t.Run("exists and removed", func(t *testing.T) {
 		err := c.Remove("myvg", "vol1")
@@ -80,7 +88,7 @@ func TestRemove(t *testing.T) {
 	})
 
 	t.Run("does not exist is noop", func(t *testing.T) {
-		m.whenError(fmt.Errorf("not found"), "/usr/sbin/lvs", "--noheadings", "--nosuffix", "myvg/gone")
+		m.whenError(fmt.Errorf("not found"), "lvs", "--noheadings", "--nosuffix", "myvg/gone")
 		err := c.Remove("myvg", "gone")
 		must.NoError(t, err)
 	})
@@ -88,9 +96,9 @@ func TestRemove(t *testing.T) {
 
 func TestSizeBytes(t *testing.T) {
 	m := newMockExec()
-	c := NewClient(m, testBinPath)
+	c := newTestClient(m)
 
-	m.whenOutput("  10485760\n", "/usr/sbin/lvs",
+	m.whenOutput("  10485760\n", "lvs",
 		"--noheadings", "--nosuffix", "--units", "b",
 		"--options", "lv_size",
 		"myvg/vol1")
@@ -102,9 +110,9 @@ func TestSizeBytes(t *testing.T) {
 
 func TestSizeBytes_error(t *testing.T) {
 	m := newMockExec()
-	c := NewClient(m, testBinPath)
+	c := newTestClient(m)
 
-	m.whenError(fmt.Errorf("lvs failed"), "/usr/sbin/lvs",
+	m.whenError(fmt.Errorf("lvs failed"), "lvs",
 		"--noheadings", "--nosuffix", "--units", "b",
 		"--options", "lv_size",
 		"myvg/missing")
@@ -115,7 +123,7 @@ func TestSizeBytes_error(t *testing.T) {
 
 func TestMakeFilesystem_unsupported(t *testing.T) {
 	m := newMockExec()
-	c := NewClient(m, testBinPath)
+	c := newTestClient(m)
 
 	err := c.MakeFilesystem("xfs", "/dev/myvg/vol1")
 	must.ErrorContains(t, err, "unsupported filesystem type")

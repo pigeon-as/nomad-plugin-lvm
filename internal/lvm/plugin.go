@@ -14,9 +14,6 @@ const (
 	// Version is the plugin version reported by fingerprint.
 	Version = "0.1.0"
 
-	// DefaultBinPath is the default directory containing LVM, mount, and mkfs binaries.
-	DefaultBinPath = "/usr/sbin"
-
 	envOperation   = "DHV_OPERATION"
 	envVolumeID    = "DHV_VOLUME_ID"
 	envCapacityMin = "DHV_CAPACITY_MIN_BYTES"
@@ -35,7 +32,6 @@ type Params struct {
 	VolumeGroup string `json:"volume_group"`
 	ThinPool    string `json:"thin_pool"`
 	MountDir    string `json:"mount_dir"`
-	BinPath     string `json:"bin_path"`
 }
 
 // Request holds parsed DHV environment variables.
@@ -121,7 +117,6 @@ type Config struct {
 	VolumeGroup string
 	ThinPool    string
 	MountDir    string
-	BinPath     string
 }
 
 func configFromParams(p *Params) (*Config, error) {
@@ -129,7 +124,6 @@ func configFromParams(p *Params) (*Config, error) {
 		VolumeGroup: p.VolumeGroup,
 		ThinPool:    p.ThinPool,
 		MountDir:    p.MountDir,
-		BinPath:     p.BinPath,
 	}
 	if cfg.VolumeGroup == "" {
 		return nil, errors.New("volume_group is required in parameters")
@@ -139,9 +133,6 @@ func configFromParams(p *Params) (*Config, error) {
 	}
 	if cfg.MountDir == "" {
 		cfg.MountDir = "/srv/nomad-volumes"
-	}
-	if cfg.BinPath == "" {
-		cfg.BinPath = DefaultBinPath
 	}
 	return cfg, nil
 }

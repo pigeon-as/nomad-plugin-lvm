@@ -9,7 +9,7 @@ import (
 )
 
 func testPlugin(m *mockExec) *Plugin {
-	return NewPlugin(NewClient(m, testBinPath))
+	return NewPlugin(newTestClient(m))
 }
 
 func testRequest(op, volID string, capMin int64, params Params) *Request {
@@ -199,7 +199,6 @@ func TestConfigFromParams(t *testing.T) {
 		must.Eq(t, "myvg", cfg.VolumeGroup)
 		must.Eq(t, "mypool", cfg.ThinPool)
 		must.Eq(t, "/srv/nomad-volumes", cfg.MountDir)
-		must.Eq(t, "/usr/sbin", cfg.BinPath)
 	})
 
 	t.Run("all params explicit", func(t *testing.T) {
@@ -207,12 +206,10 @@ func TestConfigFromParams(t *testing.T) {
 			VolumeGroup: "myvg",
 			ThinPool:    "mypool",
 			MountDir:    "/custom/mounts",
-			BinPath:     "/nix/store/lvm2/bin",
 		}
 		cfg, err := configFromParams(p)
 		must.NoError(t, err)
 		must.Eq(t, "/custom/mounts", cfg.MountDir)
-		must.Eq(t, "/nix/store/lvm2/bin", cfg.BinPath)
 	})
 
 	t.Run("missing volume_group", func(t *testing.T) {
@@ -235,8 +232,8 @@ func TestCreate_Persistent(t *testing.T) {
 	p := testPlugin(m)
 	mountDir := t.TempDir()
 
-	m.errors["/usr/sbin/lvs --noheadings --nosuffix testvg/vol1"] = fmt.Errorf("not found")
-	m.outputs["/usr/sbin/lvs --noheadings --nosuffix --units b --options lv_size testvg/vol1"] = "  1073741824"
+	m.errors["lvs --noheadings --nosuffix testvg/vol1"] = fmt.Errorf("not found")
+	m.outputs["lvs --noheadings --nosuffix --units b --options lv_size testvg/vol1"] = "  1073741824"
 
 	req := testRequest("create", "vol1", 1073741824, persistentParams(mountDir))
 	resp, err := p.create(req)
@@ -249,8 +246,8 @@ func TestCreate_Persistent_RollbackOnActivateFail(t *testing.T) {
 	m := newMockExec()
 	p := testPlugin(m)
 
-	m.errors["/usr/sbin/lvs --noheadings --nosuffix testvg/vol1"] = fmt.Errorf("not found")
-	m.errors["/usr/sbin/lvchange --activate y testvg/vol1"] = fmt.Errorf("activate failed")
+	m.errors["lvs --noheadings --nosuffix testvg/vol1"] = fmt.Errorf("not found")
+	m.errors["lvchange --activate y testvg/vol1"] = fmt.Errorf("activate failed")
 
 	req := testRequest("create", "vol1", 1073741824, persistentParams(t.TempDir()))
 	_, err := p.create(req)
@@ -262,7 +259,7 @@ func TestCreate_Persistent_Idempotent(t *testing.T) {
 	p := testPlugin(m)
 
 	// lvs succeeds → volume already exists
-	m.outputs["/usr/sbin/lvs --noheadings --nosuffix --units b --options lv_size testvg/vol1"] = "  1073741824"
+	m.outputs["lvs --noheadings --nosuffix --units b --options lv_size testvg/vol1"] = "  1073741824"
 
 	req := testRequest("create", "vol1", 1073741824, persistentParams(t.TempDir()))
 	resp, err := p.create(req)
@@ -287,8 +284,8 @@ func TestCreate_Persistent_BlockMode(t *testing.T) {
 	m := newMockExec()
 	p := testPlugin(m)
 
-	m.errors["/usr/sbin/lvs --noheadings --nosuffix testvg/vol1"] = fmt.Errorf("not found")
-	m.outputs["/usr/sbin/lvs --noheadings --nosuffix --units b --options lv_size testvg/vol1"] = "  1073741824"
+	m.errors["lvs --noheadings --nosuffix testvg/vol1"] = fmt.Errorf("not found")
+	m.outputs["lvs --noheadings --nosuffix --units b --options lv_size testvg/vol1"] = "  1073741824"
 
 	params := persistentParams(t.TempDir())
 	params.Mode = "block"
@@ -307,8 +304,8 @@ func TestCreate_Snapshot(t *testing.T) {
 	p := testPlugin(m)
 	mountDir := t.TempDir()
 
-	m.errors["/usr/sbin/lvs --noheadings --nosuffix testvg/snap1"] = fmt.Errorf("not found")
-	m.outputs["/usr/sbin/lvs --noheadings --nosuffix --units b --options lv_size testvg/snap1"] = "  1073741824"
+	m.errors["lvs --noheadings --nosuffix testvg/snap1"] = fmt.Errorf("not found")
+	m.outputs["lvs --noheadings --nosuffix --units b --options lv_size testvg/snap1"] = "  1073741824"
 
 	params := Params{
 		Type:        "snapshot",
@@ -345,7 +342,7 @@ func TestCreate_Snapshot_SourceNotExists(t *testing.T) {
 	m := newMockExec()
 	p := testPlugin(m)
 
-	m.errors["/usr/sbin/lvs --noheadings --nosuffix testvg/source1"] = fmt.Errorf("not found")
+	m.errors["lvs --noheadings --nosuffix testvg/source1"] = fmt.Errorf("not found")
 
 	params := Params{
 		Type:        "snapshot",
@@ -391,8 +388,8 @@ func TestCreate_Snapshot_BlockMode(t *testing.T) {
 	m := newMockExec()
 	p := testPlugin(m)
 
-	m.errors["/usr/sbin/lvs --noheadings --nosuffix testvg/snap1"] = fmt.Errorf("not found")
-	m.outputs["/usr/sbin/lvs --noheadings --nosuffix --units b --options lv_size testvg/snap1"] = "  1073741824"
+	m.errors["lvs --noheadings --nosuffix testvg/snap1"] = fmt.Errorf("not found")
+	m.outputs["lvs --noheadings --nosuffix --units b --options lv_size testvg/snap1"] = "  1073741824"
 
 	params := Params{
 		Type:        "snapshot",

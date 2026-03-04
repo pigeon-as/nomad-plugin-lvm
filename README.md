@@ -70,6 +70,7 @@ All configuration is passed through the volume definition's `parameters {}` bloc
 | `filesystem`   | no       | `ext4`               | Filesystem for persistent volumes                    |
 | `mode`         | no       | `filesystem`         | `filesystem` or `block`                              |
 | `mount_dir`    | no       | `/srv/nomad-volumes` | Volume mount directory                               |
+| `bin_path`     | no       | `/usr/sbin`          | Directory containing LVM, mount, and mkfs binaries   |
 
 ## Requirements
 

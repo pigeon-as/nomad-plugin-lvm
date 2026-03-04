@@ -5,23 +5,22 @@ import (
 	"os"
 
 	"github.com/pigeon-as/nomad-plugin-lvm/internal/lvm"
-	"github.com/pigeon-as/nomad-plugin-lvm/plugin"
 )
 
 func main() {
-	req, err := plugin.ParseRequest()
+	req, err := lvm.ParseRequest()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 
-	cfg, err := lvm.LoadConfig(os.Getenv(plugin.EnvPluginDir))
-	if req.Operation != "fingerprint" && err != nil {
-		fmt.Fprintf(os.Stderr, "config: %v\n", err)
-		os.Exit(1)
+	binPath := req.Params.BinPath
+	if binPath == "" {
+		binPath = lvm.DefaultBinPath
 	}
 
-	if err := plugin.Run(lvm.NewPlugin(cfg, lvm.New(lvm.ExecCommand{}, cfg.BinPath)), req); err != nil {
+	p := lvm.NewPlugin(lvm.NewClient(lvm.ExecCommand{}, binPath))
+	if err := p.Run(req); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}

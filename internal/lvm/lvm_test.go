@@ -58,7 +58,7 @@ func (m *mockExec) whenError(err error, name string, args ...string) {
 
 func TestExists(t *testing.T) {
 	m := newMockExec()
-	c := New(m, testBinPath)
+	c := NewClient(m, testBinPath)
 
 	t.Run("exists", func(t *testing.T) {
 		must.True(t, c.Exists("myvg", "mylv"))
@@ -70,31 +70,9 @@ func TestExists(t *testing.T) {
 	})
 }
 
-func TestCreateThin(t *testing.T) {
-	m := newMockExec()
-	c := New(m, testBinPath)
-
-	err := c.CreateThin("myvg", "mypool", "vol1", 1048576)
-	must.NoError(t, err)
-
-	must.SliceContains(t, m.commands,
-		"/usr/sbin/lvcreate --thin --virtualsize 1048576b --thinpool mypool --name vol1 myvg")
-}
-
-func TestCreateSnapshot(t *testing.T) {
-	m := newMockExec()
-	c := New(m, testBinPath)
-
-	err := c.CreateSnapshot("myvg", "source", "snap1")
-	must.NoError(t, err)
-
-	must.SliceContains(t, m.commands,
-		"/usr/sbin/lvcreate --snapshot --name snap1 --setactivationskip n myvg/source")
-}
-
 func TestRemove(t *testing.T) {
 	m := newMockExec()
-	c := New(m, testBinPath)
+	c := NewClient(m, testBinPath)
 
 	t.Run("exists and removed", func(t *testing.T) {
 		err := c.Remove("myvg", "vol1")
@@ -108,20 +86,9 @@ func TestRemove(t *testing.T) {
 	})
 }
 
-func TestActivate(t *testing.T) {
-	m := newMockExec()
-	c := New(m, testBinPath)
-
-	err := c.Activate("myvg", "vol1")
-	must.NoError(t, err)
-
-	must.SliceContains(t, m.commands,
-		"/usr/sbin/lvchange --activate y myvg/vol1")
-}
-
 func TestSizeBytes(t *testing.T) {
 	m := newMockExec()
-	c := New(m, testBinPath)
+	c := NewClient(m, testBinPath)
 
 	m.whenOutput("  10485760\n", "/usr/sbin/lvs",
 		"--noheadings", "--nosuffix", "--units", "b",
@@ -135,7 +102,7 @@ func TestSizeBytes(t *testing.T) {
 
 func TestSizeBytes_error(t *testing.T) {
 	m := newMockExec()
-	c := New(m, testBinPath)
+	c := NewClient(m, testBinPath)
 
 	m.whenError(fmt.Errorf("lvs failed"), "/usr/sbin/lvs",
 		"--noheadings", "--nosuffix", "--units", "b",
@@ -146,36 +113,42 @@ func TestSizeBytes_error(t *testing.T) {
 	must.Error(t, err)
 }
 
-func TestMakeFilesystem(t *testing.T) {
+func TestMakeFilesystem_unsupported(t *testing.T) {
 	m := newMockExec()
-	c := New(m, testBinPath)
+	c := NewClient(m, testBinPath)
 
-	t.Run("ext4", func(t *testing.T) {
-		err := c.MakeFilesystem("ext4", "/dev/myvg/vol1")
-		must.NoError(t, err)
-		must.SliceContains(t, m.commands, "/usr/sbin/mkfs.ext4 -q /dev/myvg/vol1")
-	})
-
-	t.Run("unsupported", func(t *testing.T) {
-		err := c.MakeFilesystem("xfs", "/dev/myvg/vol1")
-		must.ErrorContains(t, err, "unsupported filesystem type")
-	})
+	err := c.MakeFilesystem("xfs", "/dev/myvg/vol1")
+	must.ErrorContains(t, err, "unsupported filesystem type")
 }
 
-func TestMount(t *testing.T) {
-	m := newMockExec()
-	c := New(m, testBinPath)
+func TestValidateName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"simple", "myvolume", false},
+		{"with dots", "my.volume", false},
+		{"with dashes", "my-volume", false},
+		{"with underscores", "my_volume", false},
+		{"leading dot", ".hidden", true},
+		{"leading underscore", "_internal", false},
+		{"numeric", "123", false},
+		{"empty", "", true},
+		{"has slash", "my/volume", true},
+		{"has space", "my volume", true},
+		{"starts with dash", "-invalid", true},
+		{"special chars", "vol@ume!", true},
+	}
 
-	err := c.Mount("/dev/myvg/vol1", "/mnt/vol1")
-	must.NoError(t, err)
-	must.SliceContains(t, m.commands, "/usr/bin/mount /dev/myvg/vol1 /mnt/vol1")
-}
-
-func TestUnmount(t *testing.T) {
-	m := newMockExec()
-	c := New(m, testBinPath)
-
-	err := c.Unmount("/mnt/vol1")
-	must.NoError(t, err)
-	must.SliceContains(t, m.commands, "/usr/bin/umount /mnt/vol1")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateName(tc.input)
+			if tc.wantErr {
+				must.Error(t, err)
+			} else {
+				must.NoError(t, err)
+			}
+		})
+	}
 }

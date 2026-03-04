@@ -1,51 +1,75 @@
 package lvm
 
 import (
+	"bytes"
 	"fmt"
-	"path"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
 	"strings"
 )
 
-// Client wraps LVM command-line operations.
-// Binary paths are resolved once at construction time, following the
-// terraform-exec pattern of storing absolute paths as struct fields.
-type Client struct {
-	exec Exec
-
-	lvs      string // absolute path to lvs
-	lvcreate string // absolute path to lvcreate
-	lvremove string // absolute path to lvremove
-	lvchange string // absolute path to lvchange
-	mkfsExt4 string // absolute path to mkfs.ext4
-	mount    string // absolute path to mount
-	umount   string // absolute path to umount
+// Exec runs system commands.
+type Exec interface {
+	Run(name string, args ...string) error
+	Output(name string, args ...string) (string, error)
 }
 
-// New creates a Client that uses the given Exec to run commands.
-// binPath is the directory containing LVM and mkfs binaries (e.g. /usr/sbin).
-func New(exec Exec, binPath string) *Client {
-	bin := func(name string) string { return path.Join(binPath, name) }
-	return &Client{
-		exec:     exec,
-		lvs:      bin("lvs"),
-		lvcreate: bin("lvcreate"),
-		lvremove: bin("lvremove"),
-		lvchange: bin("lvchange"),
-		mkfsExt4: bin("mkfs.ext4"),
-		mount:    "/usr/bin/mount",
-		umount:   "/usr/bin/umount",
+// ExecCommand executes commands via os/exec.
+type ExecCommand struct{}
+
+func (e ExecCommand) Run(name string, args ...string) error {
+	_, err := e.Output(name, args...)
+	return err
+}
+
+func (ExecCommand) Output(name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
 	}
+	return string(out), nil
+}
+
+var validNameRe = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$`)
+
+// ValidateName checks whether a string is a valid LVM logical volume name.
+func ValidateName(name string) error {
+	if !validNameRe.MatchString(name) {
+		return fmt.Errorf("invalid LV name: %q", name)
+	}
+	return nil
+}
+
+// Client wraps LVM command-line operations.
+type Client struct {
+	exec    Exec
+	binPath string
+}
+
+func (c *Client) bin(name string) string {
+	return filepath.Join(c.binPath, name)
+}
+
+// NewClient creates a Client that resolves binaries from binPath.
+func NewClient(exec Exec, binPath string) *Client {
+	return &Client{exec: exec, binPath: binPath}
 }
 
 // Exists checks whether a logical volume exists.
 func (c *Client) Exists(vg, lv string) bool {
-	return c.exec.Run(c.lvs, "--noheadings", "--nosuffix", fmt.Sprintf("%s/%s", vg, lv)) == nil
+	return c.exec.Run(c.bin("lvs"), "--noheadings", "--nosuffix", fmt.Sprintf("%s/%s", vg, lv)) == nil
 }
 
 // CreateThin creates a thin-provisioned logical volume.
 func (c *Client) CreateThin(vg, thinPool, name string, sizeBytes int64) error {
 	size := fmt.Sprintf("%db", sizeBytes)
-	return c.exec.Run(c.lvcreate,
+	return c.exec.Run(c.bin("lvcreate"),
 		"--thin",
 		"--virtualsize", size,
 		"--thinpool", thinPool,
@@ -57,7 +81,7 @@ func (c *Client) CreateThin(vg, thinPool, name string, sizeBytes int64) error {
 // CreateSnapshot creates an LVM snapshot of an existing volume.
 func (c *Client) CreateSnapshot(vg, source, name string) error {
 	origin := fmt.Sprintf("%s/%s", vg, source)
-	return c.exec.Run(c.lvcreate,
+	return c.exec.Run(c.bin("lvcreate"),
 		"--snapshot",
 		"--name", name,
 		"--setactivationskip", "n",
@@ -70,17 +94,17 @@ func (c *Client) Remove(vg, name string) error {
 	if !c.Exists(vg, name) {
 		return nil
 	}
-	return c.exec.Run(c.lvremove, "--force", fmt.Sprintf("%s/%s", vg, name))
+	return c.exec.Run(c.bin("lvremove"), "--force", fmt.Sprintf("%s/%s", vg, name))
 }
 
 // Activate activates a logical volume.
 func (c *Client) Activate(vg, name string) error {
-	return c.exec.Run(c.lvchange, "--activate", "y", fmt.Sprintf("%s/%s", vg, name))
+	return c.exec.Run(c.bin("lvchange"), "--activate", "y", fmt.Sprintf("%s/%s", vg, name))
 }
 
 // SizeBytes returns the size of a logical volume in bytes.
 func (c *Client) SizeBytes(vg, name string) (int64, error) {
-	out, err := c.exec.Output(c.lvs,
+	out, err := c.exec.Output(c.bin("lvs"),
 		"--noheadings", "--nosuffix", "--units", "b",
 		"--options", "lv_size",
 		fmt.Sprintf("%s/%s", vg, name),
@@ -100,15 +124,15 @@ func (c *Client) MakeFilesystem(fsType, device string) error {
 	if fsType != "ext4" {
 		return fmt.Errorf("unsupported filesystem type: %q", fsType)
 	}
-	return c.exec.Run(c.mkfsExt4, "-q", device)
+	return c.exec.Run(c.bin("mkfs.ext4"), "-q", device)
 }
 
 // Mount mounts a device at the given target directory.
 func (c *Client) Mount(device, target string) error {
-	return c.exec.Run(c.mount, device, target)
+	return c.exec.Run(c.bin("mount"), device, target)
 }
 
-// Unmount unmounts the given mount point, ignoring errors if not mounted.
+// Unmount unmounts the given mount point.
 func (c *Client) Unmount(target string) error {
-	return c.exec.Run(c.umount, target)
+	return c.exec.Run(c.bin("umount"), target)
 }

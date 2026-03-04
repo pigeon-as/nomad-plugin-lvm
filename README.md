@@ -6,16 +6,7 @@ A [Nomad dynamic host volume plugin](https://developer.hashicorp.com/nomad/plugi
 
 ```bash
 make build
-cp nomad-plugin-lvm /opt/nomad/host_volume_plugins/
-```
-
-Create `nomad-plugin-lvm.json` next to the binary:
-
-```json
-{
-  "volume_group": "vg0",
-  "thin_pool": "thinpool0"
-}
+cp build/nomad-plugin-lvm /opt/nomad/host_volume_plugins/
 ```
 
 Reload the Nomad client (`SIGHUP` or `systemctl reload nomad`).
@@ -33,6 +24,11 @@ capacity_max = "10G"
 capability {
   access_mode     = "single-node-single-writer"
   attachment_mode = "file-system"
+}
+
+parameters {
+  volume_group = "vg0"
+  thin_pool    = "thinpool0"
 }
 ```
 
@@ -52,8 +48,10 @@ name      = "myapp-snap"
 plugin_id = "nomad-plugin-lvm"
 
 parameters {
-  type   = "snapshot"
-  source = "myapp-base"
+  type         = "snapshot"
+  source       = "myapp-base"
+  volume_group = "vg0"
+  thin_pool    = "thinpool0"
 }
 ```
 
@@ -61,13 +59,18 @@ The source LV must already exist in the same volume group.
 
 ## Parameters
 
-Per-volume parameters in the `parameters {}` block:
+All configuration is passed through the volume definition's `parameters {}` block:
 
-| Parameter    | Default      | Description                                          |
-|--------------|--------------|------------------------------------------------------|
-| `type`       | `persistent` | `persistent` (new thin LV) or `snapshot` (COW clone) |
-| `source`     | —            | Source LV name (required when `type = "snapshot"`)   |
-| `filesystem` | `ext4`       | Filesystem for persistent volumes (only ext4)        |
+| Parameter      | Required | Default              | Description                                          |
+|----------------|----------|----------------------|------------------------------------------------------|
+| `volume_group` | yes      | —                    | LVM volume group name                                |
+| `thin_pool`    | yes      | —                    | Thin pool name                                       |
+| `type`         | no       | `persistent`         | `persistent` (new thin LV) or `snapshot` (COW clone) |
+| `source`       | snapshot | —                    | Source LV name (required when `type = "snapshot"`)   |
+| `filesystem`   | no       | `ext4`               | Filesystem for persistent volumes                    |
+| `mode`         | no       | `filesystem`         | `filesystem` or `block`                              |
+| `mount_dir`    | no       | `/srv/nomad-volumes` | Volume mount directory                               |
+| `bin_path`     | no       | `/usr/sbin`          | Directory containing LVM, mount, and mkfs binaries   |
 
 ## Requirements
 

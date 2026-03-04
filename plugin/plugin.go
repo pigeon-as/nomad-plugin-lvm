@@ -118,6 +118,7 @@ func Run(p Plugin, req *Request) error {
 	case "fingerprint":
 		resp, err := p.Fingerprint()
 		if err != nil {
+			writeError(os.Stdout, err)
 			return fmt.Errorf("fingerprint: %w", err)
 		}
 		return writeJSON(os.Stdout, resp)
@@ -161,6 +162,9 @@ func parseParams(raw string) (*Params, error) {
 	}
 	if p.Mode != "filesystem" && p.Mode != "block" {
 		return nil, fmt.Errorf("invalid mode %q (expected filesystem or block)", p.Mode)
+	}
+	if p.Type != "persistent" && p.Type != "snapshot" {
+		return nil, fmt.Errorf("invalid type %q (expected persistent or snapshot)", p.Type)
 	}
 	return &p, nil
 }

@@ -187,6 +187,52 @@ func TestDelete(t *testing.T) {
 	must.NoError(t, err)
 }
 
+func TestDelete_MissingVolumeID(t *testing.T) {
+	m := newMockExec()
+	p := testPlugin(m)
+
+	req := testRequest("delete", "", 0, persistentParams(t.TempDir()))
+	err := p.Delete(req)
+	must.ErrorContains(t, err, "DHV_VOLUME_ID")
+}
+
+func TestDelete_InvalidVolumeID(t *testing.T) {
+	m := newMockExec()
+	p := testPlugin(m)
+
+	req := testRequest("delete", "../escape", 0, persistentParams(t.TempDir()))
+	err := p.Delete(req)
+	must.Error(t, err)
+}
+
+func TestCreate_Snapshot_BlockMode(t *testing.T) {
+	m := newMockExec()
+	p := testPlugin(m)
+
+	// snapshot doesn't exist
+	m.errors["/usr/sbin/lvs --noheadings --nosuffix testvg/snap1"] = fmt.Errorf("not found")
+	// SizeBytes
+	m.outputs["/usr/sbin/lvs --noheadings --nosuffix --units b --options lv_size testvg/snap1"] = "  1073741824"
+
+	params := plugin.Params{
+		Type:        "snapshot",
+		Source:      "source1",
+		Mode:        "block",
+		VolumeGroup: "testvg",
+		ThinPool:    "thinpool",
+		MountDir:    t.TempDir(),
+	}
+	req := testRequest("create", "snap1", 0, params)
+	resp, err := p.Create(req)
+	must.NoError(t, err)
+	must.StrContains(t, resp.Path, "/dev/testvg/snap1")
+
+	// No mount in block mode
+	for _, cmd := range m.commands {
+		must.StrNotContains(t, cmd, "mount")
+	}
+}
+
 func TestCreate_MissingVolumeID(t *testing.T) {
 	m := newMockExec()
 	p := testPlugin(m)

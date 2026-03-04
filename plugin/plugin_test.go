@@ -150,6 +150,15 @@ func TestParseRequest_parameters(t *testing.T) {
 		_, err := ParseRequest()
 		must.ErrorContains(t, err, "invalid mode")
 	})
+
+	t.Run("invalid type", func(t *testing.T) {
+		t.Setenv(EnvOperation, "create")
+		t.Setenv(EnvVolumeID, "")
+		t.Setenv(EnvCapacityMin, "")
+		t.Setenv(EnvParameters, `{"type":"magic"}`)
+		_, err := ParseRequest()
+		must.ErrorContains(t, err, "invalid type")
+	})
 }
 
 func TestEnvConstants(t *testing.T) {

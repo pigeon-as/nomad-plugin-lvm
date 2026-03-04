@@ -17,8 +17,8 @@ type Exec interface {
 // ExecCommand executes commands via os/exec.
 type ExecCommand struct{}
 
-func (ExecCommand) Run(name string, args ...string) error {
-	_, err := ExecCommand{}.Output(name, args...)
+func (e ExecCommand) Run(name string, args ...string) error {
+	_, err := e.Output(name, args...)
 	return err
 }
 

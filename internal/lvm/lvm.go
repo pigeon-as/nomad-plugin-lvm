@@ -2,7 +2,7 @@ package lvm
 
 import (
 	"fmt"
-	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -24,7 +24,7 @@ type Client struct {
 // New creates a Client that uses the given Exec to run commands.
 // binPath is the directory containing LVM and mkfs binaries (e.g. /usr/sbin).
 func New(exec Exec, binPath string) *Client {
-	bin := func(name string) string { return path.Join(binPath, name) }
+	bin := func(name string) string { return filepath.Join(binPath, name) }
 	return &Client{
 		exec:     exec,
 		lvs:      bin("lvs"),

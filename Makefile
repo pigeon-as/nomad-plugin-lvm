@@ -7,7 +7,7 @@ build:
 	go build -o build/$(PLUGIN_NAME) ./cmd/nomad-plugin-lvm
 
 test:
-	go test -v ./internal/...
+	go test -v ./...
 
 e2e:
 	sudo go test -tags=e2e -v -count=1 ./e2e

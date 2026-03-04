@@ -101,13 +101,8 @@ func (p *LVMPlugin) createPersistent(cfg *Config, volumeID string, capacity int6
 		return p.createResponse(cfg, volumeID, params.Mode)
 	}
 
-	mountPath := cfg.MountPath(volumeID)
-	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
-	}
-	_ = p.LVM.Unmount(mountPath) // idempotent: no-op if not mounted
-	if err := p.LVM.Mount(devPath, mountPath); err != nil {
-		return nil, fmt.Errorf("mount: %w", err)
+	if err := p.mountVolume(cfg, volumeID); err != nil {
+		return nil, err
 	}
 
 	return p.createResponse(cfg, volumeID, params.Mode)
@@ -139,17 +134,25 @@ func (p *LVMPlugin) createSnapshot(cfg *Config, volumeID string, params *plugin.
 		return p.createResponse(cfg, volumeID, params.Mode)
 	}
 
-	devPath := cfg.LVPath(volumeID)
-	mountPath := cfg.MountPath(volumeID)
-	if err := os.MkdirAll(mountPath, 0755); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %w", mountPath, err)
-	}
-	_ = p.LVM.Unmount(mountPath) // idempotent: no-op if not mounted
-	if err := p.LVM.Mount(devPath, mountPath); err != nil {
-		return nil, fmt.Errorf("mount: %w", err)
+	if err := p.mountVolume(cfg, volumeID); err != nil {
+		return nil, err
 	}
 
 	return p.createResponse(cfg, volumeID, params.Mode)
+}
+
+// mountVolume creates the mount directory and mounts the volume's device there.
+func (p *LVMPlugin) mountVolume(cfg *Config, volumeID string) error {
+	devPath := cfg.LVPath(volumeID)
+	mountPath := cfg.MountPath(volumeID)
+	if err := os.MkdirAll(mountPath, 0755); err != nil {
+		return fmt.Errorf("mkdir %s: %w", mountPath, err)
+	}
+	_ = p.LVM.Unmount(mountPath) // idempotent: no-op if not mounted
+	if err := p.LVM.Mount(devPath, mountPath); err != nil {
+		return fmt.Errorf("mount: %w", err)
+	}
+	return nil
 }
 
 func (p *LVMPlugin) createResponse(cfg *Config, volumeID, mode string) (*plugin.CreateResponse, error) {

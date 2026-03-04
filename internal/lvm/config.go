@@ -3,10 +3,13 @@ package lvm
 import (
 	"errors"
 	"fmt"
-	"path"
+	"path/filepath"
 
 	"github.com/pigeon-as/nomad-plugin-lvm/plugin"
 )
+
+// DefaultBinPath is the default directory containing LVM, mount, and mkfs binaries.
+const DefaultBinPath = "/usr/sbin"
 
 // Config holds validated LVM settings extracted from request parameters.
 type Config struct {
@@ -44,7 +47,7 @@ func (c *Config) validate() error {
 		c.MountDir = "/srv/nomad-volumes"
 	}
 	if c.BinPath == "" {
-		c.BinPath = "/usr/sbin"
+		c.BinPath = DefaultBinPath
 	}
 	return nil
 }
@@ -56,5 +59,5 @@ func (c *Config) LVPath(name string) string {
 
 // MountPath returns the mount point directory for a volume.
 func (c *Config) MountPath(name string) string {
-	return path.Join(c.MountDir, name)
+	return filepath.Join(c.MountDir, name)
 }

@@ -26,7 +26,7 @@ func main() {
 		}
 	}
 
-	binPath := "/usr/sbin"
+	binPath := lvm.DefaultBinPath
 	if cfg != nil {
 		binPath = cfg.BinPath
 	}

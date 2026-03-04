@@ -168,7 +168,7 @@ func TestMount(t *testing.T) {
 
 	err := c.Mount("/dev/myvg/vol1", "/mnt/vol1")
 	must.NoError(t, err)
-	must.SliceContains(t, m.commands, "/usr/bin/mount /dev/myvg/vol1 /mnt/vol1")
+	must.SliceContains(t, m.commands, "/usr/sbin/mount /dev/myvg/vol1 /mnt/vol1")
 }
 
 func TestUnmount(t *testing.T) {
@@ -177,5 +177,5 @@ func TestUnmount(t *testing.T) {
 
 	err := c.Unmount("/mnt/vol1")
 	must.NoError(t, err)
-	must.SliceContains(t, m.commands, "/usr/bin/umount /mnt/vol1")
+	must.SliceContains(t, m.commands, "/usr/sbin/umount /mnt/vol1")
 }

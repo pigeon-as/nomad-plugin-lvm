@@ -32,8 +32,8 @@ func New(exec Exec, binPath string) *Client {
 		lvremove: bin("lvremove"),
 		lvchange: bin("lvchange"),
 		mkfsExt4: bin("mkfs.ext4"),
-		mount:    "/usr/bin/mount",
-		umount:   "/usr/bin/umount",
+		mount:    bin("mount"),
+		umount:   bin("umount"),
 	}
 }
 
